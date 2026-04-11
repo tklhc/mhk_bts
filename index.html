@@ -133,6 +133,12 @@ input,select,textarea{font-family:inherit}
 .d-imgbox{height:150px;background:var(--white);border-bottom:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;flex-shrink:0}
 .d-imgicon{font-size:40px;color:var(--border)}
 .d-imgkod{font-size:10px;color:var(--hint);font-family:monospace}
+.d-imgbox.has-img{height:220px;padding:0}
+.d-imgbox.has-img img{width:100%;height:100%;object-fit:contain;padding:12px}
+.img-upload-zone{border:2px dashed var(--border);border-radius:var(--r);padding:18px;text-align:center;cursor:pointer;transition:all .15s;background:var(--p6);position:relative;margin-top:8px}
+.img-upload-zone:hover{border-color:var(--p2);background:var(--p5)}
+.img-upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.img-preview{width:100%;max-height:150px;object-fit:contain;border-radius:var(--r);margin-top:8px;border:1px solid var(--border);background:var(--white)}
 .d-body{padding:22px 26px;display:flex;flex-direction:column;gap:16px}
 .d-title{font-size:18px;font-weight:700;color:var(--p1);line-height:1.3}
 .d-badge{display:inline-block;background:var(--p4);color:var(--p1);font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px}
@@ -572,20 +578,36 @@ async function loadGithubData(){
     // Tüm mevcut ürünleri temizle, GitHub'dan gelenleri yükle
     URUNLER.length = 0;
     rows.forEach((r,i)=>{
-      const kod  = String(r['Takım Kodu'] || r['kod'] || '').trim();
-      const ad   = String(r['Ürün Adı']  || r['ad']  || kod).trim();
+      const kod   = String(r['Takım Kodu'] || r['kod'] || '').trim();
+      const ad    = String(r['Ürün Adı']   || r['ad']  || kod).trim();
+      const katAd = String(r['Kategori Adı']     || '').trim();
+      const altAd = String(r['Alt Kategori Adı'] || '').trim();
       if(!kod) return;
+
+      // Kategori çözümle
+      let katId = null;
+      if(katAd){
+        let ana = KATEGORILER.find(k=>!k.ust && k.ad.toLowerCase()===katAd.toLowerCase());
+        if(!ana){ana={id:nextId.kat++,ad:katAd,ust:null,sira:KATEGORILER.filter(k=>!k.ust).length+1,renk:'#E4F0FA',stroke:'#0076CC'};KATEGORILER.push(ana);}
+        if(altAd){
+          let alt=KATEGORILER.find(k=>k.ust===ana.id&&k.ad.toLowerCase()===altAd.toLowerCase());
+          if(!alt){alt={id:nextId.kat++,ad:altAd,ust:ana.id,sira:KATEGORILER.filter(k=>k.ust===ana.id).length+1,renk:'#E4F0FA',stroke:'#0076CC'};KATEGORILER.push(alt);}
+          katId=alt.id;
+        } else { katId=ana.id; }
+      }
+
       URUNLER.push({
-        id:     i+1,
-        kat:    parseInt(r['Kategori ID'] || r['kategori_id']) || null,
+        id:    i+1,
+        kat:   katId,
         kod,
-        ad:     ad || kod,
-        fiyat:  parseFloat(r['Fiyat'] || r['liste_fiyati'] || r['fiyat']) || 0,
-        cap:    r['Takım Çapı'] ? r['Takım Çapı']+'mm' : (r['cap'] || ''),
-        boy:    r['Kesme Boyu'] ? r['Kesme Boyu']+'mm' : (r['boy'] || ''),
-        saft:   r['Şaft Çapı']  ? r['Şaft Çapı']+'mm'  : (r['saft'] || ''),
-        tboy:   r['Takım Boyu'] ? r['Takım Boyu']+'mm' : (r['tboy'] || ''),
-        birim:  String(r['Birim'] || r['birim'] || 'adet').trim(),
+        ad:    ad || kod,
+        fiyat: parseFloat(r['Fiyat'] || r['liste_fiyati'] || r['fiyat']) || 0,
+        cap:   r['Takım Çapı'] ? r['Takım Çapı']+'mm' : (r['cap'] || ''),
+        boy:   r['Kesme Boyu'] ? r['Kesme Boyu']+'mm' : (r['boy'] || ''),
+        saft:  r['Şaft Çapı']  ? r['Şaft Çapı']+'mm'  : (r['saft'] || ''),
+        tboy:  r['Takım Boyu'] ? r['Takım Boyu']+'mm' : (r['tboy'] || ''),
+        birim: String(r['Birim'] || r['birim'] || 'adet').trim(),
+        gorsel: String(r['Görsel URL'] || r['gorsel_url'] || r['gorsel'] || '').trim() || undefined,
       });
     });
     nextId.urun = URUNLER.length + 1;
@@ -695,11 +717,20 @@ function selectUrun(id){
   aktifUrun=URUNLER.find(u=>u.id===id); renderUrunler();
   const u=aktifUrun,isk=oturum.iskonto_orani,n=net(u.fiyat,isk),kazanc=Math.round((u.fiyat-n)*100)/100;
   const kat=KATEGORILER.find(k=>k.id===u.kat);
-  const specs=[['Stok kodu',u.kod],u.cap&&['Takım çapı',u.cap],u.boy&&['Kesme boyu',u.boy],u.saft&&['Şaft çapı',u.saft],['Birim',u.birim],kat&&['Kategori',kat.ad]].filter(Boolean);
+  const specs=[
+    ['Stok Kodu',  u.kod],
+    u.cap  && ['Takım Çapı',  u.cap],
+    u.saft && ['Şaft Çapı',   u.saft],
+    u.boy  && ['Kesme Boyu',  u.boy],
+    u.tboy && ['Takım Boyu',  u.tboy],
+  ].filter(Boolean);
   document.getElementById('det-empty').style.display='none';
   document.getElementById('det-scroll').style.display='block';
   document.getElementById('det-scroll').innerHTML=`
-    <div class="d-imgbox"><div class="d-imgicon">◈</div><div class="d-imgkod">${u.kod}</div></div>
+    ${u.gorsel
+      ? `<div class="d-imgbox has-img"><img src="${u.gorsel}" alt="${u.ad}"/></div>`
+      : `<div class="d-imgbox"><div class="d-imgicon">◈</div><div class="d-imgkod">${u.kod}</div></div>`
+    }
     <div class="d-body">
       <div><div class="d-title">${u.ad}</div>${kat?`<div class="d-badge" style="margin-top:8px">${kat.ad}</div>`:''}</div>
       <div class="fbox">
@@ -900,37 +931,124 @@ function renderUrunler2(){
 }
 
 function urunFormHtml(u={}){
-  const katOpts=KATEGORILER.map(k=>`<option value="${k.id}"${u.kat===k.id?' selected':''}>${escHtml(k.ad)}</option>`).join('');
+  const anaKatlar = KATEGORILER.filter(k=>!k.ust).sort((a,b)=>a.sira-b.sira);
+  // Seçili kategorinin ana mı alt mı olduğunu bul
+  const seciliKat = u.kat ? KATEGORILER.find(k=>k.id===u.kat) : null;
+  const seciliAna = seciliKat ? (seciliKat.ust ? KATEGORILER.find(k=>k.id===seciliKat.ust) : seciliKat) : null;
+  const seciliAlt = seciliKat && seciliKat.ust ? seciliKat : null;
+  const anaOpts = anaKatlar.map(k=>`<option value="${k.id}"${seciliAna&&seciliAna.id===k.id?' selected':''}>${escHtml(k.ad)}</option>`).join('');
+  const altOpts = seciliAna ? KATEGORILER.filter(k=>k.ust===seciliAna.id).map(k=>`<option value="${k.id}"${seciliAlt&&seciliAlt.id===k.id?' selected':''}>${escHtml(k.ad)}</option>`).join('') : '';
   return `
-    <div class="field-row"><div class="field"><label>Stok kodu *</label><input id="f-kod" value="${escHtml(u.kod||'')}" placeholder="MHK-FRZ-001"/></div>
-      <div class="field"><label>Kategori</label><select id="f-kat"><option value="">—</option>${katOpts}</select></div></div>
-    <div class="field"><label>Ürün adı *</label><input id="f-ad" value="${escHtml(u.ad||'')}" placeholder="4 Ağız Düz Freze"/></div>
+    <div class="field-row">
+      <div class="field"><label>Stok kodu *</label><input id="f-kod" value="${escHtml(u.kod||'')}" placeholder="444655"/></div>
+      <div class="field"><label>Ürün adı *</label><input id="f-ad" value="${escHtml(u.ad||'')}" placeholder="444x6x13x55"/></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Kategori</label>
+        <select id="f-kat" onchange="updateAltKat(this.value,'f-altkat')">
+          <option value="">—</option>${anaOpts}
+        </select>
+      </div>
+      <div class="field"><label>Alt Kategori</label>
+        <select id="f-altkat">
+          <option value="">— Yok —</option>${altOpts}
+        </select>
+      </div>
+    </div>
     <div class="field-row">
       <div class="field"><label>Liste fiyatı (€)</label><input id="f-fiyat" type="number" value="${u.fiyat||0}" min="0" step="0.01"/></div>
       <div class="field"><label>Birim</label><select id="f-birim"><option ${u.birim==='adet'?'selected':''}>adet</option><option ${u.birim==='takım'?'selected':''}>takım</option></select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Takım Çapı (mm)</label><input id="f-cap" type="number" value="${u.cap?parseFloat(u.cap):''}" min="0" step="0.1" placeholder="6"/></div>
+      <div class="field"><label>Şaft Çapı (mm)</label><input id="f-saft" type="number" value="${u.saft?parseFloat(u.saft):''}" min="0" step="0.1" placeholder="6"/></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Kesme Boyu (mm)</label><input id="f-boy" type="number" value="${u.boy?parseFloat(u.boy):''}" min="0" step="0.1" placeholder="13"/></div>
+      <div class="field"><label>Takım Boyu (mm)</label><input id="f-tboy" type="number" value="${u.tboy?parseFloat(u.tboy):''}" min="0" step="0.1" placeholder="57"/></div>
+    </div>
+    <div class="field">
+      <label>Ürün Görseli</label>
+      <div class="img-upload-zone" onclick="document.getElementById('f-gorsel-inp').click()" id="f-gorsel-zone">
+        <input type="file" id="f-gorsel-inp" accept="image/*" onchange="previewGorsel(this)" onclick="event.stopPropagation()"/>
+        <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:var(--hint);stroke-width:1.5;stroke-linecap:round;margin-bottom:6px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div style="font-size:12px;color:var(--muted)">Tıkla veya sürükle · JPG, PNG, WEBP</div>
+        <div style="font-size:11px;color:var(--hint);margin-top:3px">Görsel GitHub'a ayrıca yüklenebilir; URL de girilebilir</div>
+      </div>
+      ${u.gorsel ? `<img src="${u.gorsel}" class="img-preview" id="f-gorsel-preview"/>
+        <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+          <button type="button" onclick="clearGorsel()" style="padding:4px 10px;border:1px solid #F7C1C1;border-radius:var(--r);background:transparent;color:var(--red);font-size:11px;cursor:pointer">Resmi kaldır</button>
+          <span style="font-size:10px;color:var(--hint)">Mevcut görsel</span>
+        </div>` : '<div id="f-gorsel-preview-wrap"></div>'}
+      <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+        <span style="font-size:11px;color:var(--muted);flex-shrink:0">veya URL:</span>
+        <input id="f-gorsel-url" type="url" placeholder="https://raw.githubusercontent.com/..." value="${u.gorsel_url||''}" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:12px;color:var(--text);background:var(--p6);outline:none"/>
+      </div>
+    </div>
     </div>`;
 }
 
-function modalUrunEkle(){openModal('Yeni ürün ekle',urunFormHtml(),`<button class="btn" onclick="closeModal()">İptal</button><button class="btn btn-primary" onclick="saveUrun()">Kaydet</button>`);}
-function modalUrunDuzenle(id){const u=URUNLER.find(x=>x.id===id);openModal('Ürün düzenle',urunFormHtml(u),`<button class="btn" onclick="closeModal()">İptal</button><button class="btn btn-primary" onclick="saveUrun(${id})">Güncelle</button>`);}
+function previewGorsel(inp){
+  const file = inp.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    window._gorselData = e.target.result;
+    // Önizleme alanını güncelle
+    const wrap = document.getElementById('f-gorsel-preview-wrap');
+    if(wrap) wrap.innerHTML = `<img src="${e.target.result}" class="img-preview"/>
+      <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+        <button type="button" onclick="clearGorsel()" style="padding:4px 10px;border:1px solid #F7C1C1;border-radius:var(--r);background:transparent;color:var(--red);font-size:11px;cursor:pointer">Resmi kaldır</button>
+        <span style="font-size:10px;color:var(--hint)">${file.name}</span>
+      </div>`;
+    const zone = document.getElementById('f-gorsel-zone');
+    if(zone) zone.style.display='none';
+  };
+  reader.readAsDataURL(file);
+}
+function clearGorsel(){
+  window._gorselData='';
+  const wrap=document.getElementById('f-gorsel-preview-wrap');
+  if(wrap) wrap.innerHTML='';
+  const zone=document.getElementById('f-gorsel-zone');
+  if(zone) zone.style.display='';
+  const inp=document.getElementById('f-gorsel-inp');
+  if(inp) inp.value='';
+}
+
+function updateAltKat(anaId, selId){
+  const sel=document.getElementById(selId);if(!sel)return;
+  const altlar=KATEGORILER.filter(k=>k.ust===parseInt(anaId));
+  sel.innerHTML='<option value="">— Yok —</option>'+altlar.map(k=>`<option value="${k.id}">${escHtml(k.ad)}</option>`).join('');
+}
+function modalUrunEkle(){window._gorselData='';openModal('Yeni ürün ekle',urunFormHtml(),`<button class="btn" onclick="closeModal()">İptal</button><button class="btn btn-primary" onclick="saveUrun()">Kaydet</button>`);}
+function modalUrunDuzenle(id){window._gorselData='';const u=URUNLER.find(x=>x.id===id);openModal('Ürün düzenle',urunFormHtml(u),`<button class="btn" onclick="closeModal()">İptal</button><button class="btn btn-primary" onclick="saveUrun(${id})">Güncelle</button>`);}
 function saveUrun(id){
   const kod=document.getElementById('f-kod').value.trim(),ad=document.getElementById('f-ad').value.trim();
-  const kat=parseInt(document.getElementById('f-kat').value)||null;
+  const altKatVal=parseInt(document.getElementById('f-altkat')?.value)||null;
+  const kat=altKatVal||(parseInt(document.getElementById('f-kat').value)||null);
   const fiyat=parseFloat(document.getElementById('f-fiyat').value)||0;
   const birim=document.getElementById('f-birim').value;
+  const cap  = document.getElementById('f-cap').value  ? document.getElementById('f-cap').value+'mm'  : '';
+  const saft = document.getElementById('f-saft').value ? document.getElementById('f-saft').value+'mm' : '';
+  const boy  = document.getElementById('f-boy').value  ? document.getElementById('f-boy').value+'mm'  : '';
+  const tboy = document.getElementById('f-tboy').value ? document.getElementById('f-tboy').value+'mm' : '';
+  const gorselUrl = document.getElementById('f-gorsel-url')?.value.trim() || '';
+  const gorselData = window._gorselData || '';
+  const gorsel = gorselData || gorselUrl || (id ? (URUNLER.find(x=>x.id===id)||{}).gorsel || '' : '');
   if(!kod||!ad){toast('Stok kodu ve ad gerekli','error');return;}
-  if(id){const u=URUNLER.find(x=>x.id===id);Object.assign(u,{kod,ad,kat,fiyat,birim});toast('Ürün güncellendi','success');}
-  else{URUNLER.push({id:nextId.urun++,kod,ad,kat,fiyat,birim,aktif:1});toast('Ürün eklendi','success');}
+  if(id){const u=URUNLER.find(x=>x.id===id);Object.assign(u,{kod,ad,kat,fiyat,birim,cap,saft,boy,tboy,gorsel});toast('Ürün güncellendi','success');}
+  else{URUNLER.push({id:nextId.urun++,kod,ad,kat,fiyat,birim,cap,saft,boy,tboy,gorsel,aktif:1});toast('Ürün eklendi','success');}
   closeModal();renderUrunler2();
 }
 function silUrun(id){const u=URUNLER.find(x=>x.id===id);openConfirm('Ürün silinsin mi?',`"${u.ad}" (${u.kod}) kalıcı olarak silinecek.`,()=>{URUNLER.splice(URUNLER.findIndex(x=>x.id===id),1);toast('Ürün silindi','success');renderUrunler2();});}
 
 // ── Import ──
-const IMPORT_COLS=[{key:'takım_kodu',label:'Takım Kodu',zorunlu:true},{key:'takım_çapı',label:'Takım Çapı',zorunlu:false},{key:'kesme_boyu',label:'Kesme Boyu',zorunlu:false},{key:'şaft_çapı',label:'Şaft Çapı',zorunlu:false},{key:'takım_boyu',label:'Takım Boyu',zorunlu:false},{key:'fiyat',label:'Fiyat',zorunlu:true}];
+const IMPORT_COLS=[{key:'takım_kodu',label:'Takım Kodu',zorunlu:true},{key:'ürün_adı',label:'Ürün Adı',zorunlu:false},{key:'kategori_adı',label:'Kategori Adı',zorunlu:false},{key:'alt_kategori_adı',label:'Alt Kategori Adı',zorunlu:false},{key:'fiyat',label:'Fiyat',zorunlu:true},{key:'takım_çapı',label:'Takım Çapı',zorunlu:false},{key:'kesme_boyu',label:'Kesme Boyu',zorunlu:false},{key:'şaft_çapı',label:'Şaft Çapı',zorunlu:false},{key:'takım_boyu',label:'Takım Boyu',zorunlu:false}];
 let importData=[];
 
 function normalizeHeader(h){return h.trim().toLowerCase().replace(/i̇/g,'i').replace(/ı/g,'i').replace(/ş/g,'s').replace(/ç/g,'c').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/\s+/g,'_');}
-function matchCol(h){const n=normalizeHeader(h);const map={takim_kodu:'takım_kodu',kod:'takım_kodu',takim_capi:'takım_çapı',cap:'takım_çapı',kesme_boyu:'kesme_boyu',boy:'kesme_boyu',saft_capi:'şaft_çapı',saft:'şaft_çapı',takim_boyu:'takım_boyu',takim_boy:'takım_boyu',toplam_boy:'takım_boyu',boy2:'takım_boyu',fiyat:'fiyat',price:'fiyat'};return map[n]||null;}
+function matchCol(h){const n=normalizeHeader(h);const map={takim_kodu:'takım_kodu',kod:'takım_kodu',stok_kodu:'takım_kodu',urun_adi:'ürün_adı',urun_ad:'ürün_adı',ad:'ürün_adı',kategori_adi:'kategori_adı',kategori:'kategori_adı',alt_kategori_adi:'alt_kategori_adı',alt_kategori:'alt_kategori_adı',fiyat:'fiyat',price:'fiyat',liste_fiyati:'fiyat',takim_capi:'takım_çapı',cap:'takım_çapı',kesme_boyu:'kesme_boyu',boy:'kesme_boyu',saft_capi:'şaft_çapı',saft:'şaft_çapı',takim_boyu:'takım_boyu',takim_boy:'takım_boyu',toplam_boy:'takım_boyu'};return map[n]||null;}
 
 function renderImport(){
   document.getElementById('a-topbar-actions').innerHTML='';
@@ -990,22 +1108,25 @@ function renderImport(){
 function exportForGithub(){
   // Tüm ürünleri GitHub formatında xlsx olarak indir
   const rows = URUNLER.map(u=>{
-    const kat = KATEGORILER.find(k=>k.id===u.kat);
+    const kat    = KATEGORILER.find(k=>k.id===u.kat);
+    const anaKat = kat && kat.ust ? KATEGORILER.find(k=>k.id===kat.ust) : kat;
+    const altKat = kat && kat.ust ? kat : null;
     return {
-      'Takım Kodu'  : u.kod,
-      'Ürün Adı'   : u.ad,
-      'Kategori ID' : u.kat || '',
-      'Kategori Adı': kat ? kat.ad : '',
-      'Fiyat'       : u.fiyat,
-      'Takım Çapı'  : u.cap  ? u.cap.replace('mm','')  : '',
-      'Kesme Boyu'  : u.boy  ? u.boy.replace('mm','')  : '',
-      'Şaft Çapı'   : u.saft ? u.saft.replace('mm','') : '',
-      'Takım Boyu'  : u.tboy ? u.tboy.replace('mm','') : '',
-      'Birim'       : u.birim || 'adet',
+      'Takım Kodu'      : u.kod,
+      'Ürün Adı'        : u.ad,
+      'Kategori Adı'    : anaKat ? anaKat.ad : '',
+      'Alt Kategori Adı': altKat  ? altKat.ad  : '',
+      'Fiyat'           : u.fiyat,
+      'Takım Çapı'      : u.cap  ? u.cap.replace('mm','')  : '',
+      'Kesme Boyu'      : u.boy  ? u.boy.replace('mm','')  : '',
+      'Şaft Çapı'       : u.saft ? u.saft.replace('mm','') : '',
+      'Takım Boyu'      : u.tboy ? u.tboy.replace('mm','') : '',
+      'Birim'           : u.birim || 'adet',
+      'Görsel URL'      : u.gorsel_url || '',
     };
   });
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:18},{wch:24},{wch:12},{wch:18},{wch:10},{wch:12},{wch:12},{wch:12},{wch:12},{wch:8}];
+  ws['!cols'] = [{wch:16},{wch:24},{wch:18},{wch:18},{wch:10},{wch:12},{wch:12},{wch:12},{wch:12},{wch:8},{wch:40}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Ürünler');
   XLSX.writeFile(wb, 'urunler.xlsx');
@@ -1029,18 +1150,18 @@ function handleFile(inp){
     if(!rows.length){toast('Dosyada veri bulunamadı','error');return;}
     importData=rows.map(row=>{const out={};Object.entries(row).forEach(([h,v])=>{const k=matchCol(h);if(k)out[k]=String(v).trim();});return out;}).filter(r=>r['takım_kodu']);
     if(!importData.length){toast('Takım Kodu sütunu bulunamadı','error');return;}
-    const COLS=['takım_kodu','takım_çapı','kesme_boyu','şaft_çapı','takım_boyu','fiyat'];
-    const LABELS={'takım_kodu':'Takım Kodu','takım_çapı':'Takım Çapı','kesme_boyu':'Kesme Boyu','şaft_çapı':'Şaft Çapı','takım_boyu':'Takım Boyu','fiyat':'Fiyat'};
+    const COLS=['takım_kodu','ürün_adı','kategori_adı','alt_kategori_adı','fiyat','takım_çapı','kesme_boyu','şaft_çapı','takım_boyu'];
+    const LABELS={'takım_kodu':'Takım Kodu','ürün_adı':'Ürün Adı','kategori_adı':'Kategori Adı','alt_kategori_adı':'Alt Kategori','fiyat':'Fiyat','takım_çapı':'Takım Çapı','kesme_boyu':'Kesme Boyu','şaft_çapı':'Şaft Çapı','takım_boyu':'Takım Boyu'};
     document.getElementById('import-preview').innerHTML=`<div style="font-size:12px;color:var(--muted);margin:14px 0 8px"><strong>${importData.length}</strong> satır okundu</div>
       <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>${COLS.map(k=>`<th style="text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);background:var(--p6);color:var(--muted);font-weight:600">${LABELS[k]}</th>`).join('')}</tr></thead>
-      <tbody>${importData.slice(0,5).map(r=>`<tr>${COLS.map(k=>{let v=r[k]||'—';if((k==='takım_çapı'||k==='kesme_boyu'||k==='şaft_çapı'||k==='takım_boyu')&&r[k])v=r[k]+'mm';if(k==='fiyat'&&r[k])v='€'+parseFloat(r[k]).toFixed(2);return `<td style="padding:7px 10px;border-bottom:1px solid var(--border)">${escHtml(String(v))}</td>`;}).join('')}</tr>`).join('')}</tbody></table>`;
+      <tbody>${importData.slice(0,5).map(r=>`<tr>${COLS.map(k=>{let v=r[k]||'—';if((k==='takım_çapı'||k==='kesme_boyu'||k==='şaft_çapı'||k==='takım_boyu')&&r[k]&&r[k]!=='—')v=r[k]+'mm';if(k==='fiyat'&&r[k])v='€'+parseFloat(r[k]).toFixed(2);return `<td style="padding:7px 10px;border-bottom:1px solid var(--border)">${escHtml(String(v))}</td>`;}).join('')}</tr>`).join('')}</tbody></table>`;
     document.getElementById('import-actions').innerHTML=`<button class="btn btn-primary" onclick="doImport()">İçe aktar (${importData.length} ürün)</button>`;
   };reader.readAsArrayBuffer(file);
 }
 
 function indir_sablon(){
-  const ws=XLSX.utils.aoa_to_sheet([['Takım Kodu','Takım Çapı','Kesme Boyu','Şaft Çapı','Takım Boyu','Fiyat'],['MHK-FRZ-001',6,13,6,57,12.50]]);
-  ws['!cols']=[{wch:18},{wch:12},{wch:12},{wch:12},{wch:12},{wch:10}];
+  const ws=XLSX.utils.aoa_to_sheet([['Takım Kodu','Ürün Adı','Kategori Adı','Alt Kategori Adı','Fiyat','Takım Çapı','Kesme Boyu','Şaft Çapı','Takım Boyu'],['MHK-FRZ-001','4 Ağız Düz Freze','Frezeler','Chatter Free',12.50,6,13,6,57]]);
+  ws['!cols']=[{wch:16},{wch:24},{wch:18},{wch:18},{wch:10},{wch:12},{wch:12},{wch:12},{wch:12}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Ürünler');XLSX.writeFile(wb,'miheng_sablon.xlsx');
 }
 
@@ -1048,10 +1169,39 @@ function doImport(){
   const katId=parseInt(document.getElementById('import-kat').value)||null;
   let eklenen=0,guncellenen=0;
   importData.forEach(r=>{
-    const kod=r['takım_kodu'],cap=r['takım_çapı']?r['takım_çapı']+'mm':'',boy=r['kesme_boyu']?r['kesme_boyu']+'mm':'',saft=r['şaft_çapı']?r['şaft_çapı']+'mm':'',tboy=r['takım_boyu']?r['takım_boyu']+'mm':'',fiyat=parseFloat(r['fiyat'])||0;
-    const mevcut=URUNLER.find(u=>u.kod===kod);
-    if(mevcut){Object.assign(mevcut,{kat:katId,fiyat,cap,boy,saft,tboy});guncellenen++;}
-    else{URUNLER.push({id:nextId.urun++,kod,ad:kod,kat:katId,fiyat,cap,boy,saft,tboy,birim:'adet',aktif:1});eklenen++;}
+    const kod  = r['takım_kodu'];
+    const ad   = r['ürün_adı']        ? String(r['ürün_adı']).trim()        : kod;
+    const katAd= r['kategori_adı']    ? String(r['kategori_adı']).trim()    : '';
+    const altAd= r['alt_kategori_adı']? String(r['alt_kategori_adı']).trim(): '';
+    const cap  = r['takım_çapı'] ? r['takım_çapı']+'mm' : '';
+    const boy  = r['kesme_boyu'] ? r['kesme_boyu']+'mm' : '';
+    const saft = r['şaft_çapı']  ? r['şaft_çapı']+'mm'  : '';
+    const tboy = r['takım_boyu'] ? r['takım_boyu']+'mm' : '';
+    const fiyat= parseFloat(r['fiyat'])||0;
+
+    // Kategori çözümle: önce alt kategori, yoksa ana kategori
+    let resolvedKat = katId;
+    if(katAd){
+      let anaKat = KATEGORILER.find(k=>!k.ust && k.ad.toLowerCase()===katAd.toLowerCase());
+      if(!anaKat){
+        anaKat = {id:nextId.kat++, ad:katAd, ust:null, sira:KATEGORILER.filter(k=>!k.ust).length+1, renk:'#E4F0FA', stroke:'#0076CC'};
+        KATEGORILER.push(anaKat);
+      }
+      if(altAd){
+        let altKat = KATEGORILER.find(k=>k.ust===anaKat.id && k.ad.toLowerCase()===altAd.toLowerCase());
+        if(!altKat){
+          altKat = {id:nextId.kat++, ad:altAd, ust:anaKat.id, sira:KATEGORILER.filter(k=>k.ust===anaKat.id).length+1, renk:'#E4F0FA', stroke:'#0076CC'};
+          KATEGORILER.push(altKat);
+        }
+        resolvedKat = altKat.id;
+      } else {
+        resolvedKat = anaKat.id;
+      }
+    }
+
+    const mevcut = URUNLER.find(u=>u.kod===kod);
+    if(mevcut){Object.assign(mevcut,{ad,kat:resolvedKat,fiyat,cap,boy,saft,tboy});guncellenen++;}
+    else{URUNLER.push({id:nextId.urun++,kod,ad,kat:resolvedKat,fiyat,cap,boy,saft,tboy,birim:'adet',aktif:1});eklenen++;}
   });
   toast(`${eklenen} eklendi, ${guncellenen} güncellendi`,'success');
   importData=[];document.getElementById('import-preview').innerHTML='';document.getElementById('import-actions').innerHTML='';
